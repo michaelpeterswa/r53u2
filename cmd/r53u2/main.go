@@ -22,7 +22,10 @@ func main() {
 	logger.Info("r53u2 init...")
 
 	r53u2Settings := settings.InitSettings(logger, "config/settings.yaml")
-	settings.SetAWSEnvironment(r53u2Settings.AWS)
+	err = settings.SetAWSEnvironment(r53u2Settings.AWS)
+	if err != nil {
+		logger.Error("failed to set AWS environment variables", zap.Error(err))
+	}
 
 	// ensure that dns records are updated on first check
 	currentIP := ""
@@ -35,7 +38,7 @@ func main() {
 	r53 := route53.New(awsSession)
 
 	c := cron.New()
-	c.AddFunc(r53u2Settings.CheckInterval, func() {
+	err = c.AddFunc(r53u2Settings.CheckInterval, func() {
 		newIP, err := ip.Get(r53u2Settings.IPProvider)
 		if err != nil {
 			logger.Error("failed to acquire current ip address", zap.Error(err))
@@ -64,6 +67,9 @@ func main() {
 			}
 		}
 	})
+	if err != nil {
+		logger.Fatal("failed to add cron function", zap.Error(err))
+	}
 
 	c.Start()
 	select {}
