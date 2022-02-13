@@ -3,6 +3,7 @@ package ip
 import (
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
 func Get(s string) (string, error) {
@@ -16,5 +17,6 @@ func Get(s string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(body), nil
+
+	return strings.TrimSpace(string(body)), nil
 }
