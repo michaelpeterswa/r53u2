@@ -4,7 +4,7 @@ go 1.17
 
 require (
 	github.com/aws/aws-sdk-go v1.42.52
-	github.com/robfig/cron v1.2.0
+	github.com/robfig/cron/v3 v3.0.1
 	go.uber.org/zap v1.20.0
 	gopkg.in/yaml.v2 v2.4.0
 )

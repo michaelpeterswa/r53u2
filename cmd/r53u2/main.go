@@ -23,7 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/route53"
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 	"nw.codes/r53u2/internal/ip"
 	"nw.codes/r53u2/internal/logging"
@@ -56,7 +56,7 @@ func main() {
 	r53 := route53.New(awsSession)
 
 	c := cron.New()
-	err = c.AddFunc(r53u2Settings.CheckInterval, func() {
+	_, err = c.AddFunc(r53u2Settings.CheckInterval, func() {
 		currentIP, err := ip.Get(r53u2Settings.IPProvider)
 		if err != nil {
 			logger.Error("failed to acquire current ip address", zap.Error(err))
