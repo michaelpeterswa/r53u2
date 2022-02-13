@@ -1,8 +1,26 @@
+/*
+
+          ______ _____        ___
+   _____ / ____/|__  / __  __|__ \
+  / ___//___ \   /_ < / / / /__/ /
+ / /   ____/ / ___/ // /_/ // __/
+/_/   /_____/ /____/ \__,_//____/
+
+Route53Updater2
+by michaelpeterswa (nw.codes)
+2022
+
+	"software development is clearly still a black art"
+		- President William J. Clinton
+
+*/
+
 package main
 
 import (
 	"log"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/robfig/cron"
@@ -28,7 +46,7 @@ func main() {
 	}
 
 	// ensure that dns records are updated on first check
-	currentIP := ""
+	previouslyStoredIP := ""
 
 	awsSession, err := session.NewSession()
 	if err != nil {
@@ -39,22 +57,25 @@ func main() {
 
 	c := cron.New()
 	err = c.AddFunc(r53u2Settings.CheckInterval, func() {
-		newIP, err := ip.Get(r53u2Settings.IPProvider)
+		currentIP, err := ip.Get(r53u2Settings.IPProvider)
 		if err != nil {
 			logger.Error("failed to acquire current ip address", zap.Error(err))
 		}
-		if newIP != currentIP {
-			currentIP = newIP
-			hostedZones, err := r53.ListHostedZones(nil)
+		if currentIP != previouslyStoredIP {
+			hostedZones, err := r53.ListHostedZones(&route53.ListHostedZonesInput{
+				MaxItems: aws.String("100"),
+			})
 			if err != nil {
 				logger.Error("failed to list hosted zones", zap.Error(err))
 			}
 
 			// skipping pagination because it doesn't apply to me at this moment
+			// (with MaxItems set in the request, pagination will not occur when zones <= 100)
 			if *hostedZones.IsTruncated {
 				logger.Warn("list of hosted zones is truncated", zap.Bool("isTruncated", *hostedZones.IsTruncated))
 			}
 
+			// match domains in the settings to hosted zones on Route53 and only update zones common to both listss
 			for _, zone := range hostedZones.HostedZones {
 				for _, domain := range r53u2Settings.Domains {
 					if util.GetURLFromZoneName(*zone.Name) == domain {
@@ -65,6 +86,8 @@ func main() {
 					}
 				}
 			}
+			logger.Info("updated ip for route53 zones", zap.Int("zones", len(hostedZones.HostedZones)), zap.String("previous-ip", previouslyStoredIP), zap.String("new-ip", currentIP))
+			previouslyStoredIP = currentIP
 		}
 	})
 	if err != nil {
