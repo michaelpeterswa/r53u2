@@ -60,6 +60,7 @@ func main() {
 		currentIP, err := ip.Get(r53u2Settings.IPProvider)
 		if err != nil {
 			logger.Error("failed to acquire current ip address", zap.Error(err))
+			return
 		}
 		if currentIP != previouslyStoredIP {
 			hostedZones, err := r53.ListHostedZones(&route53.ListHostedZonesInput{
@@ -67,6 +68,7 @@ func main() {
 			})
 			if err != nil {
 				logger.Error("failed to list hosted zones", zap.Error(err))
+				return
 			}
 
 			// skipping pagination because it doesn't apply to me at this moment
