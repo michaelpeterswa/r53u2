@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/caarlos0/env/v11"
 )
@@ -9,8 +10,9 @@ import (
 type R53u2Config struct {
 	LogLevel string `env:"LOG_LEVEL" envDefault:"error"`
 
-	CheckIPProvider string   `env:"CHECK_IP_PROVIDER" envDefault:"https://checkip.amazonaws.com"`
-	Domains         []string `env:"DOMAINS" envSeparator:","`
+	CheckIPProvider string        `env:"CHECK_IP_PROVIDER" envDefault:"https://checkip.amazonaws.com"`
+	CheckIPTimeout  time.Duration `env:"CHECK_IP_TIMEOUT" envDefault:"5s"`
+	Domains         []string      `env:"DOMAINS" envSeparator:","`
 
 	AWSAccessKeyId     string `env:"AWS_ACCESS_KEY_ID"`
 	AWSAccessKeySecret string `env:"AWS_ACCESS_KEY_SECRET"`

@@ -88,15 +88,17 @@ func main() {
 
 	r53 := route53.New(awsSession)
 
-	ipClient := ip.NewIPClient(r53u2Config.CheckIPProvider)
+	ipClient := ip.NewIPClient(r53u2Config.CheckIPProvider, r53u2Config.CheckIPTimeout)
 
 	c := cron.New()
 	_, err = c.AddFunc(r53u2Config.CronSchedule, func() {
+		logger.Debug("pre ip-client get")
 		currentIP, err := ipClient.Get()
 		if err != nil {
 			logger.Error("failed to acquire current ip address", zap.Error(err))
 			return
 		}
+		logger.Debug("acquired current ip address", zap.String("ip", currentIP.String()))
 		if currentIP.Equal(previouslyStoredIP) {
 			hostedZones, err := r53.ListHostedZones(&route53.ListHostedZonesInput{
 				MaxItems: aws.String("100"),
