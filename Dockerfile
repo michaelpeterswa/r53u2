@@ -1,20 +1,16 @@
 # -=-=-=-=-=-=- Compile Image -=-=-=-=-=-=-
 
-FROM golang:1.17 AS stage-compile
+FROM golang:1 AS stage-compile
 
 WORKDIR /go/src/app
 COPY . .
 
-RUN go get -d -v ./cmd/r53u2
-RUN CGO_ENABLED=0 GOOS=linux go build ./cmd/r53u2
+RUN go get -d -v ./... && CGO_ENABLED=0 GOOS=linux go build ./cmd/r53u2
 
-# -=-=-=-=-=-=- Final Image -=-=-=-=-=-=-
+# -=-=-=-=- Final Distroless Image -=-=-=-=-
 
-FROM alpine:latest 
+# hadolint ignore=DL3007
+FROM gcr.io/distroless/static-debian12:latest as stage-final
 
-WORKDIR /root/
-COPY --from=stage-compile /go/src/app/r53u2 ./
-
-RUN apk --no-cache add ca-certificates
-
-ENTRYPOINT [ "./r53u2" ]  
+COPY --from=stage-compile /go/src/app/r53u2 /
+CMD ["/r53u2"]
