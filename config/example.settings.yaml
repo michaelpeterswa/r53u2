@@ -1,9 +1,0 @@
----
-aws:
-  aws-access-key-id: ""
-  aws-access-key-secret: ""
-  aws-default-region: "us-west-2"
-ip-provider: "http://checkip.amazonaws.com/"
-check-interval: "@every 0h0m15s"
-domains:
-  - "example.com"

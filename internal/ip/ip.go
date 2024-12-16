@@ -7,21 +7,24 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type IPClient struct {
 	Provider string
+	Timeout  time.Duration
 }
 
-func NewIPClient(provider string) *IPClient {
+func NewIPClient(provider string, timeout time.Duration) *IPClient {
 	return &IPClient{
 		Provider: provider,
+		Timeout:  timeout,
 	}
 }
 
 func (ic *IPClient) Get() (net.IP, error) {
 	httpClient := http.Client{
-		Timeout: 5,
+		Timeout: ic.Timeout,
 	}
 
 	url, err := url.Parse(ic.Provider)
