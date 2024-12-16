@@ -10,4 +10,4 @@ services:
       # logging
       LOG_LEVEL: "debug"
       CRON_SCHEDULE: "* * * * *"
-      DOMAINS: "michaelpeterswa.com,mptrswa.com,cascades.dev,cascadelabs.dev,halcyonresearch.dev,nw.codes,shrt.fyi,nwst.us,676f.dev,letterkenny.dev"
+      DOMAINS: ""
