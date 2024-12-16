@@ -18,16 +18,21 @@ by michaelpeterswa (nw.codes)
 package main
 
 import (
+	"context"
 	"log"
+	"log/slog"
+	"net"
+	"os"
 
+	"github.com/alpineworks/ootel"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
+	"nw.codes/r53u2/internal/config"
 	"nw.codes/r53u2/internal/ip"
 	"nw.codes/r53u2/internal/logging"
-	"nw.codes/r53u2/internal/settings"
 	"nw.codes/r53u2/internal/util"
 	"nw.codes/r53u2/internal/zones"
 )
@@ -39,14 +44,42 @@ func main() {
 	}
 	logger.Info("r53u2 init...")
 
-	r53u2Settings := settings.InitSettings(logger, "config/settings.yaml")
-	err = settings.SetAWSEnvironment(r53u2Settings.AWS)
+	r53u2Config, err := config.NewConfig()
 	if err != nil {
-		logger.Error("failed to set AWS environment variables", zap.Error(err))
+		logger.Fatal("failed to parse config", zap.Error(err))
 	}
 
+	ctx := context.Background()
+
+	ootelClient := ootel.NewOotelClient(
+		ootel.WithMetricConfig(
+			ootel.NewMetricConfig(
+				r53u2Config.MetricsEnabled,
+				r53u2Config.MetricsPort,
+			),
+		),
+		ootel.WithTraceConfig(
+			ootel.NewTraceConfig(
+				r53u2Config.TracingEnabled,
+				r53u2Config.TracingSampleRate,
+				r53u2Config.TracingService,
+				r53u2Config.TracingVersion,
+			),
+		),
+	)
+
+	shutdown, err := ootelClient.Init(ctx)
+	if err != nil {
+		slog.Error("could not initialize ootel client", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
+
+	defer func() {
+		_ = shutdown(ctx)
+	}()
+
 	// ensure that dns records are updated on first check
-	previouslyStoredIP := ""
+	var previouslyStoredIP net.IP
 
 	awsSession, err := session.NewSession()
 	if err != nil {
@@ -55,14 +88,16 @@ func main() {
 
 	r53 := route53.New(awsSession)
 
+	ipClient := ip.NewIPClient(r53u2Config.CheckIPProvider)
+
 	c := cron.New()
-	_, err = c.AddFunc(r53u2Settings.CheckInterval, func() {
-		currentIP, err := ip.Get(r53u2Settings.IPProvider)
+	_, err = c.AddFunc(r53u2Config.CronSchedule, func() {
+		currentIP, err := ipClient.Get()
 		if err != nil {
 			logger.Error("failed to acquire current ip address", zap.Error(err))
 			return
 		}
-		if currentIP != previouslyStoredIP {
+		if currentIP.Equal(previouslyStoredIP) {
 			hostedZones, err := r53.ListHostedZones(&route53.ListHostedZonesInput{
 				MaxItems: aws.String("100"),
 			})
@@ -79,16 +114,16 @@ func main() {
 
 			// match domains in the settings to hosted zones on Route53 and only update zones common to both listss
 			for _, zone := range hostedZones.HostedZones {
-				for _, domain := range r53u2Settings.Domains {
+				for _, domain := range r53u2Config.Domains {
 					if util.GetURLFromZoneName(*zone.Name) == domain {
-						err := zones.UpdateHostedZone(r53, zone, currentIP)
+						err := zones.UpdateHostedZone(r53, zone, currentIP.String())
 						if err != nil {
 							logger.Error("failed to update hosted zone", zap.String("domain", domain))
 						}
 					}
 				}
 			}
-			logger.Info("updated ip for route53 zones", zap.Int("zones", len(hostedZones.HostedZones)), zap.String("previous-ip", previouslyStoredIP), zap.String("new-ip", currentIP))
+			logger.Info("updated ip for route53 zones", zap.Int("zones", len(hostedZones.HostedZones)), zap.String("previous-ip", previouslyStoredIP.String()), zap.String("new-ip", currentIP.String()))
 			previouslyStoredIP = currentIP
 		}
 	})
