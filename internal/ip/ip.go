@@ -1,22 +1,52 @@
 package ip
 
 import (
-	"io/ioutil"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
-func Get(s string) (string, error) {
-	resp, err := http.Get(s)
+type IPClient struct {
+	Provider string
+}
+
+func NewIPClient(provider string) *IPClient {
+	return &IPClient{
+		Provider: provider,
+	}
+}
+
+func (ic *IPClient) Get() (net.IP, error) {
+	httpClient := http.Client{
+		Timeout: 5,
+	}
+
+	url, err := url.Parse(ic.Provider)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	resp, err := httpClient.Do(&http.Request{
+		Method: http.MethodGet,
+		URL:    url,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get IP from provider: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	return strings.TrimSpace(string(body)), nil
+	ip := net.ParseIP(strings.TrimSpace(string(body)))
+	if ip == nil {
+		return nil, fmt.Errorf("failed to parse IP from response: %s", string(body))
+	}
+
+	return ip, nil
 }
