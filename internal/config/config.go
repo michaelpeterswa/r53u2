@@ -14,9 +14,10 @@ type R53u2Config struct {
 	CheckIPTimeout  time.Duration `env:"CHECK_IP_TIMEOUT" envDefault:"5s"`
 	Domains         []string      `env:"DOMAINS" envSeparator:","`
 
-	AWSAccessKeyId     string `env:"AWS_ACCESS_KEY_ID"`
-	AWSAccessKeySecret string `env:"AWS_ACCESS_KEY_SECRET"`
-	AWSDefaultRegion   string `env:"AWS_DEFAULT_REGION"`
+	// required, but not used in program directly, only for aws sdk
+	// AWSAccessKeyId     string `env:"AWS_ACCESS_KEY_ID"`
+	// AWSSecretAccessKey string `env:"AWS_SECRET_ACCESS_KEY"`
+	// AWSDefaultRegion   string `env:"AWS_DEFAULT_REGION"`
 
 	CronSchedule string `env:"CRON_SCHEDULE" envDefault:"@every 30m"`
 
