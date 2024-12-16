@@ -29,7 +29,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/robfig/cron/v3"
-	"go.uber.org/zap"
 	"nw.codes/r53u2/internal/config"
 	"nw.codes/r53u2/internal/ip"
 	"nw.codes/r53u2/internal/logging"
@@ -38,15 +37,24 @@ import (
 )
 
 func main() {
-	logger, err := logging.InitZap()
-	if err != nil {
-		log.Panicf("could not acquire zap logger: %s", err.Error())
+	logLevel := os.Getenv("LOG_LEVEL")
+	if logLevel == "" {
+		logLevel = "error"
 	}
-	logger.Info("r53u2 init...")
+
+	slogLevel, err := logging.LogLevelToSlogLevel(logLevel)
+	if err != nil {
+		log.Fatalf("could not convert log level: %s", err)
+	}
+
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slogLevel,
+	})))
 
 	r53u2Config, err := config.NewConfig()
 	if err != nil {
-		logger.Fatal("failed to parse config", zap.Error(err))
+		slog.Error("failed to parse config", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	ctx := context.Background()
@@ -81,37 +89,41 @@ func main() {
 	// ensure that dns records are updated on first check
 	var previouslyStoredIP net.IP
 
+	slog.Debug("starting aws session")
 	awsSession, err := session.NewSession()
 	if err != nil {
-		logger.Error("failed to start AWS session", zap.Error(err))
+		slog.Error("failed to start aws session", slog.String("error", err.Error()))
 	}
 
+	slog.Debug("creating route53 client")
 	r53 := route53.New(awsSession)
 
 	ipClient := ip.NewIPClient(r53u2Config.CheckIPProvider, r53u2Config.CheckIPTimeout)
 
 	c := cron.New()
+
+	slog.Debug("adding cron function")
 	_, err = c.AddFunc(r53u2Config.CronSchedule, func() {
-		logger.Debug("pre ip-client get")
+		slog.Debug("pre ip-client get")
 		currentIP, err := ipClient.Get()
 		if err != nil {
-			logger.Error("failed to acquire current ip address", zap.Error(err))
+			slog.Error("failed to acquire current ip address", slog.String("error", err.Error()))
 			return
 		}
-		logger.Debug("acquired current ip address", zap.String("ip", currentIP.String()))
-		if currentIP.Equal(previouslyStoredIP) {
+		slog.Debug("acquired current ip address", slog.String("ip", currentIP.String()))
+		if !currentIP.Equal(previouslyStoredIP) {
 			hostedZones, err := r53.ListHostedZones(&route53.ListHostedZonesInput{
 				MaxItems: aws.String("100"),
 			})
 			if err != nil {
-				logger.Error("failed to list hosted zones", zap.Error(err))
+				slog.Error("failed to list hosted zones", slog.String("error", err.Error()))
 				return
 			}
 
 			// skipping pagination because it doesn't apply to me at this moment
 			// (with MaxItems set in the request, pagination will not occur when zones <= 100)
 			if *hostedZones.IsTruncated {
-				logger.Warn("list of hosted zones is truncated", zap.Bool("isTruncated", *hostedZones.IsTruncated))
+				slog.Warn("list of hosted zones is truncated", slog.Bool("isTruncated", *hostedZones.IsTruncated))
 			}
 
 			// match domains in the settings to hosted zones on Route53 and only update zones common to both listss
@@ -120,17 +132,18 @@ func main() {
 					if util.GetURLFromZoneName(*zone.Name) == domain {
 						err := zones.UpdateHostedZone(r53, zone, currentIP.String())
 						if err != nil {
-							logger.Error("failed to update hosted zone", zap.String("domain", domain))
+							slog.Error("failed to update hosted zone", slog.String("domain", domain))
 						}
 					}
 				}
 			}
-			logger.Info("updated ip for route53 zones", zap.Int("zones", len(hostedZones.HostedZones)), zap.String("previous-ip", previouslyStoredIP.String()), zap.String("new-ip", currentIP.String()))
+			slog.Info("updated ip for route53 zones", slog.Int("zones", len(hostedZones.HostedZones)), slog.String("previous-ip", previouslyStoredIP.String()), slog.String("new-ip", currentIP.String()))
 			previouslyStoredIP = currentIP
 		}
 	})
 	if err != nil {
-		logger.Fatal("failed to add cron function", zap.Error(err))
+		slog.Error("failed to add cron function", slog.String("error", err.Error()))
+		os.Exit(1)
 	}
 
 	c.Start()
